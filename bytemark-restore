@@ -1,0 +1,136 @@
+#!/usr/bin/perl
+
+use Net::SFTP::Foreign;
+use Date::Format;
+use Text::SimpleTable;
+use Getopt::Long qw(GetOptions);
+
+if(! -e "/etc/bytemark-restore.conf")
+{
+        print("\n\nOops, the config file does not exist ! \n");
+	print("\nEnter the FQDN of the backup host to use\n");
+	my $file_buh = <STDIN>;
+	print("\nEnter the port number the backup restore uses\n");
+	my $file_port = <STDIN>;
+	open(my $fh, '>>', '/etc/bytemark-restore.conf');
+	print $fh "managed_backup_host: $file_buh";
+	print $fh "managed_backup_port: $file_port";
+	close $fh
+}
+
+
+my %optionsh = ();
+my $cnt = 0;
+my $backuphost = `grep managed_backup_host /etc/bytemark-restore.conf | cut -d: -f2`;
+my $port = `grep managed_backup_port /etc/bytemark-restore.conf | cut -d: -f2`;
+my $key = "/home/bytemark-backup/.ssh/id_rsa";
+my $machine = `hostname`;
+my ($fmtdate, $match, $help, $listonly,$destination);
+my $t1 = Text::SimpleTable->new(15, 150);
+my $t2 = Text::SimpleTable->new([5, 'Match'], [10, 'Directory'], [20, 'Date']);
+
+$port =~ s/\s+$//;
+$machine =~ s/\s+$//;
+$backuphost =~ s/^\s+|\s+$//g;
+
+
+GetOptions('help' => \$help, 'listonly' => \$listonly, 'destination=s' => \$destination) or die "Usage: $0 --destination --help --listonly \n";
+print("\n\nDestination was $destination\n\n");
+my $tofind = $ARGV[0];
+
+if($help)
+{
+        print("\n\nUsage bytemark-restore --destination= --help --listonly \n\n");
+        exit 0;
+}
+
+if((length $tofind) < 1)
+{
+        print("\n\nSorry, you must enter a path to restore\n\n");
+        exit 0;
+}
+
+if($port < 1)
+{
+        print("\n\nIt looks like the port number is missing from the config file, unable to proceed, sorry !\n\n");
+        exit 0;
+}
+
+print "Searching for $tofind \n";
+
+my $sftp = Net::SFTP::Foreign->new(host => $backuphost, user => 'root', key_path => $key, port => $port , more => [-o => 'StrictHostKeyChecking=no', -o => 'UserKnownHostsFile=/dev/null', -o => 'LogLevel=error']);
+
+my $ls = $sftp->ls("/destination/$machine") or die "unable to retrieve directory: ".$sftp->error;
+
+
+foreach my $loopvariable(@$ls)
+{
+        my $name = $loopvariable->{filename};
+        if($name ne ".." && $name ne "." )
+        {
+                print "Considering directory $name\n";
+                my $path = "/destination/$machine/$name//localhost/$tofind";
+                my @findpath =  $sftp->find($path, descend => 0);
+                foreach my $innerloopvariable(@findpath)
+                {
+                        my $innername = $innerloopvariable->{filename};
+                        my $a = $innerloopvariable->{a};
+                        my $time = $a->{'atime'};
+                        $fmtdate = time2str("%Y-%m-%d-%H_%m_%S",$time);
+                        my $obj = {filename => $innerloopvariable->{filename}, number => $cnt, name => $name, fmtdate => $fmtdate };
+                        $optionsh{$time} = $obj;
+                        $cnt++;
+                        last;
+                }
+        }
+}
+
+if($cnt eq 0)
+{
+        print ("\n\nSorry, there were no matches found for $tofind ! \n\n");
+        exit 0;
+}
+
+foreach my $sorttime (sort keys %optionsh) 
+{
+        my $tmp = $optionsh{$sorttime};
+        $t2->row($tmp->{'number'},$tmp->{'name'},$tmp->{'fmtdate'});
+}
+print $t2->draw;
+
+if(not defined $listonly)
+{
+        print "Enter a match number : ";
+        my $input = <STDIN>;
+        chomp $input;
+
+        while ( my ($key, $value) = each(%optionsh) ) 
+        {
+                if($value->{number} == $input) 
+                {
+                        $match = $value->{filename};
+                        $fmtdate = $value->{fmtdate};
+                        last;
+                }
+                
+        }
+
+        print "Match was $match \n";
+
+        $t1->row('You selected', $match);
+        $t1->hr;
+
+	
+        my $restore = "root@" . $backuphost . ":" .  $match;
+
+	if(not defined $destination)
+	{
+        	$destination = 'restore-of-'."$fmtdate";
+        	mkdir($destination);
+	}
+        $t1->row('Restoring to', $destination);
+        print $t1->draw;
+        #print ("\n\n rsync -e 'ssh -p $port -i $key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' --archive --verbose --acls --xattrs --numeric-ids  -M--fake-super  $restore $destination \n\n");
+        system("rsync -e 'ssh -p $port -i $key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=error' --archive --verbose --acls --xattrs --numeric-ids -M--fake-super  $restore $destination");
+}
+
