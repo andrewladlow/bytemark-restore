@@ -26,6 +26,7 @@ use Net::SFTP::Foreign;
 use Date::Format;
 use Text::SimpleTable;
 use Getopt::Long qw(GetOptions);
+use Sys::Hostname;
 
 if(! -e "/etc/bytemark-restore.conf")
 {
@@ -46,10 +47,17 @@ my $cnt = 0;
 my $backuphost = `grep managed_backup_host /etc/bytemark-restore.conf | cut -d: -f2`;
 my $port = `grep managed_backup_port /etc/bytemark-restore.conf | cut -d: -f2`;
 my $key = "/home/bytemark-backup/.ssh/id_rsa";
-my $machine = `hostname`;
-my ($fmtdate, $match, $help, $listonly,$destination);
+my ($fmtdate, $match, $help, $listonly,$destination,$machine);
 my $t1 = Text::SimpleTable->new(15, 150);
 my $t2 = Text::SimpleTable->new([5, 'Match'], [10, 'Directory'], [20, 'Date']);
+
+$machine = hostname;
+
+if($machine eq "(none)")
+{
+	print("It looks like the hostname is the netboot default. Please enter the FQDN of the host :");
+	$machine = <STDIN>;
+}
 
 $port =~ s/\s+$//;
 $machine =~ s/\s+$//;
