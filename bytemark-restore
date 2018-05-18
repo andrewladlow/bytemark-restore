@@ -160,6 +160,13 @@ if(not defined $listonly)
 	}
         $t1->row('Restoring to', $destination);
         print $t1->draw;
+	print "Definitely restore to $destination ? This is your last chance..... (y/n)\n\n";
+	chomp(my $ynanswer = <STDIN>);
+	if($ynanswer eq "n" or $ynanswer eq "N")
+	{
+		exit 0;
+	}
+	
         #print ("\n\n rsync -e 'ssh -p $port -i $key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' --archive --verbose --acls --xattrs --numeric-ids  -M--fake-super  $restore $destination \n\n");
         system("rsync -e 'ssh -p $port -i $key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=error' --archive --verbose --acls --xattrs --numeric-ids -M--fake-super  $restore $destination");
 }
