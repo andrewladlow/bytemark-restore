@@ -105,7 +105,7 @@ foreach my $loopvariable(@$ls)
                 {
                         my $innername = $innerloopvariable->{filename};
                         my $a = $innerloopvariable->{a};
-                        my $time = $a->{'atime'};
+                        my $time = $a->{'mtime'};
                         $fmtdate = time2str("%Y-%m-%d-%H_%m_%S",$time);
                         my $obj = {filename => $innerloopvariable->{filename}, number => $cnt, name => $name, fmtdate => $fmtdate };
                         $optionsh{$time} = $obj;
